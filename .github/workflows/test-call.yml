@@ -5,6 +5,6 @@ on:
 
 jobs:
   test:
-    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@v1.0.0-dogfood
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@main
     with:
       labels-ref: main

@@ -1,0 +1,142 @@
+name: Label cleanup
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        type: boolean
+        default: true
+      labels-ref:
+        type: string
+        default: "v1"
+      aliases-ref:
+        type: string
+        default: "v1"
+      report-only:
+        type: boolean
+        default: false
+      report-issue-title:
+        type: string
+        default: "Label cleanup report"
+
+# NOTE: No permissions block at reusable level. Callers grant:
+#   permissions: issues: write, contents: read
+
+concurrency:
+  group: cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: ${{ inputs.labels-ref }}
+          path: rs
+
+      - name: Install yq + jq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: 1. Snapshot (reversibility gate)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          bash rs/.github/scripts/cleanup-snapshot.sh "$REPO" snapshot.json
+          ls -la snapshot.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-snapshot-${{ github.run_id }}
+          path: snapshot.json
+          retention-days: 90
+
+      - name: 2. Fetch current labels + categorize
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/labels" --paginate --jq '[.[] | {name, color}]' > current.json
+          bash rs/.github/scripts/cleanup-categorize.sh \
+            rs/labels.yml rs/label-aliases.yml < current.json > categories.json
+          cat categories.json | jq .
+
+      - name: 3. Migrate (skipped if report-only)
+        if: ${{ !inputs.report-only }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY: ${{ inputs.dry-run }}
+        run: |
+          # shellcheck disable=SC2034
+          jq -c '.aliased[]' categories.json | while read -r pair; do
+            from=$(echo "$pair" | jq -r .from)
+            to=$(echo "$pair" | jq -r .to)
+            bash rs/.github/scripts/cleanup-migrate.sh "$REPO" "$from" "$to" "$DRY"
+          done
+
+      - name: 4. Build + post report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.run_number }}
+          TITLE: ${{ inputs.report-issue-title }} — run ${{ github.run_number }}
+        run: |
+          gh api "repos/$REPO/issues?state=all" --paginate \
+            --jq '[.[] | {n:.number, labels:[.labels[].name]}]' > issues.json
+          body=$(bash rs/.github/scripts/cleanup-report.sh categories.json issues.json "$RUN")
+
+          existing=$(gh issue list --repo "$REPO" \
+            --label "kind/chore" --label "area/ci" \
+            --search "Label cleanup report in:title" \
+            --json number,title --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$REPO" --title "$TITLE" --body "$body"
+            echo "Updated report issue #$existing"
+          else
+            gh issue create --repo "$REPO" \
+              --title "$TITLE" \
+              --body "$body" \
+              --label "kind/chore,area/ci,priority/low"
+          fi
+
+      - name: 5. Re-triage backfill
+        if: ${{ !inputs.report-only && !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # shellcheck disable=SC2034
+          jq -c '.aliased[]' categories.json | while read -r pair; do
+            to=$(echo "$pair" | jq -r .to)
+            from=$(echo "$pair" | jq -r .from)
+            gh api "repos/$REPO/issues?state=all&labels=$to" --paginate \
+              --jq '.[].number' | while read -r n; do
+              labels=$(gh issue view "$n" --repo "$REPO" --json labels --jq '[.labels[].name]')
+              has_kind=$(echo  "$labels" | jq 'any(startswith("kind/"))')
+              has_area=$(echo  "$labels" | jq 'any(startswith("area/"))')
+              has_pri=$(echo   "$labels" | jq 'any(startswith("priority/"))')
+              if [ "$has_kind" != "true" ] || [ "$has_area" != "true" ] || [ "$has_pri" != "true" ]; then
+                gh issue edit "$n" --repo "$REPO" --add-label "status/triage" >/dev/null
+                gh workflow run triage.yml --repo "$REPO" -f issue_number="$n" || true
+                echo "Re-triage queued for #$n"
+              fi
+            done
+          done
+
+      - name: 6. Summary
+        run: |
+          {
+            echo "## Cleanup summary"
+            jq -r '"- Standard: \(.standard | length)\n- Aliased (migrated): \(.aliased | length)\n- Ambiguous (reported): \(.ambiguous | length)\n- Unmapped (reported): \(.unmapped | length)"' categories.json
+            echo ""
+            echo "- dry-run: ${{ inputs.dry-run }}"
+            echo "- report-only: ${{ inputs.report-only }}"
+            echo "- snapshot artifact: cleanup-snapshot-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"

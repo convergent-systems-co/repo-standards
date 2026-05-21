@@ -1,0 +1,22 @@
+name: Self-triage (smoke)
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number: { required: true, type: number }
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    uses: ./.github/workflows/triage.yml
+    with:
+      agent_mode: rest-only
+      rubric-ref: main
+      confidence-threshold: "0.6"

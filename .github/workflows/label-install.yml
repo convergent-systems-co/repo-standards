@@ -47,23 +47,23 @@ jobs:
           echo "Syncing $count labels into $REPO"
 
           # Fetch existing labels (paginated)
-          existing=$(gh api "repos/$REPO/labels" --paginate --jq '.[].name' | sort -u)
+          existing=$(gh api "repos/${REPO}/labels" --paginate --jq '.[].name' | sort -u)
 
           # Create or patch each standard label
           for i in $(seq 0 $((count - 1))); do
             name=$(yq -r ".labels[$i].name" /tmp/labels.yml)
-            color="$(yq -r '.labels['$i'].color' /tmp/labels.yml)"
+            color="$(yq -r ".labels[${i}].color" /tmp/labels.yml)"
             desc=$(yq -r ".labels[$i].description" /tmp/labels.yml)
 
             if echo "$existing" | grep -qx "$name"; then
-              gh api "repos/$REPO/labels/$(printf '%s' "$name" | jq -sRr @uri)" \
+              gh api "repos/${REPO}/labels/$(printf '%s' "$name" | jq -sRr @uri)" \
                 -X PATCH \
-                --input - <<< "{\"new_name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}" >/dev/null
+                --input - <<< "{\"new_name\":\"${name}\",\"color\":\"${color}\",\"description\":\"${desc}\"}" >/dev/null
               echo "  patched: $name"
             else
-              gh api "repos/$REPO/labels" \
+              gh api "repos/${REPO}/labels" \
                 -X POST \
-                --input - <<< "{\"name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}" >/dev/null
+                --input - <<< "{\"name\":\"${name}\",\"color\":\"${color}\",\"description\":\"${desc}\"}" >/dev/null
               echo "  created: $name"
             fi
           done

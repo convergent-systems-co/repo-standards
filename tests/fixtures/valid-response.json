@@ -1,0 +1,12 @@
+{
+  "labels": ["kind/bug", "area/cli", "priority/high"],
+  "body_fill": {
+    "severity": "high",
+    "repro": "1. Run `aish run`\n2. Observe panic",
+    "acceptance": ["aish run exits cleanly with a usage message"],
+    "out_of_scope": []
+  },
+  "confidence": 0.92,
+  "needs_human": false,
+  "reasoning": "CLI crash with clear repro."
+}

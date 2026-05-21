@@ -1,0 +1,173 @@
+# Reusable workflow: agentic issue triage.
+# Consumers invoke via:
+#   uses: convergent-systems-co/repo-standards/.github/workflows/triage.yml@v1
+# Callers MUST grant: permissions: issues: write, contents: read
+
+name: Triage
+
+on:
+  workflow_call:
+    inputs:
+      agent_mode:
+        description: "copilot-then-rest | copilot-only | rest-only"
+        type: string
+        default: "copilot-then-rest"
+      rubric-ref:
+        description: "Git ref of repo-standards for triage-rubric.md + labels.yml"
+        type: string
+        default: "v1"
+      confidence-threshold:
+        type: string
+        default: "0.6"
+
+# NOTE: No permissions block at reusable level. Callers grant.
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/triage'))
+    steps:
+      - name: Resolve issue number
+        id: meta
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          case "$EVENT" in
+            issues|issue_comment)
+              echo "issue=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+              ;;
+            workflow_dispatch)
+              echo "issue=${{ github.event.inputs.issue_number }}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Skip bot-authored issues
+        id: skip
+        env:
+          AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          case "$AUTHOR" in
+            dependabot*|renovate*|github-actions*)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "skip=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - if: steps.skip.outputs.skip == 'true'
+        run: echo "Skipping bot-authored issue"
+
+      - if: steps.skip.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: ${{ inputs.rubric-ref }}
+          path: rs
+
+      - if: steps.skip.outputs.skip == 'false'
+        name: Install yq + jq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          jq --version
+
+      - if: steps.skip.outputs.skip == 'false'
+        name: Deterministic prelude — apply status/triage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          gh issue edit "$ISSUE" --repo "$REPO" --add-label "status/triage" || true
+
+      - if: steps.skip.outputs.skip == 'false'
+        name: Fetch + redact issue body
+        id: body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          gh issue view "$ISSUE" --repo "$REPO" --json title,body,user \
+            --jq '"# " + .title + "\n\n" + .body' \
+            | bash rs/.github/scripts/triage-redact.sh > /tmp/issue.md
+          echo "len=$(wc -c < /tmp/issue.md)" >> "$GITHUB_OUTPUT"
+
+      - if: steps.skip.outputs.skip == 'false' && (inputs.agent_mode == 'copilot-then-rest' || inputs.agent_mode == 'copilot-only')
+        id: copilot
+        name: Method A — assign @github-copilot[bot] with rubric
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          rubric=$(cat rs/docs/triage-rubric.md)
+          body=$(cat /tmp/issue.md)
+          prompt=$(printf '%s\n\n---\nIssue to triage:\n%s' "$rubric" "$body")
+          # Assign Copilot agent (no-op if not entitled — fall through to method B)
+          gh api -X POST "repos/$REPO/issues/$ISSUE/assignees" \
+            -f assignees='["github-copilot[bot]"]' >/dev/null 2>&1 || true
+          gh issue comment "$ISSUE" --repo "$REPO" --body "$prompt" >/dev/null
+          # Poll for agent response — heuristic: look for a copilot-authored comment with JSON
+          for _ in $(seq 1 30); do   # ~5 min at 10s
+            sleep 10
+            latest=$(gh api "repos/$REPO/issues/$ISSUE/comments" \
+              --jq '[.[] | select(.user.login | contains("copilot"))] | last // empty')
+            if [ -n "$latest" ]; then
+              echo "$latest" | jq -r .body > /tmp/agent.txt
+              if bash rs/.github/scripts/triage-parse.sh < /tmp/agent.txt > /tmp/agent.json 2>/dev/null; then
+                echo "method=copilot" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+          done
+          echo "Copilot did not respond in time" >&2
+          exit 1
+
+      - if: steps.skip.outputs.skip == 'false' && (steps.copilot.outcome == 'failure' || inputs.agent_mode == 'rest-only')
+        id: rest
+        name: Method B — REST API fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          # Method B uses the org's REST agent endpoint (TBD); until configured,
+          # writes a safe "needs_human" stub so the pipeline remains safe.
+          rubric=$(cat rs/docs/triage-rubric.md)
+          body=$(cat /tmp/issue.md)
+          prompt=$(printf '%s\n\n---\nIssue to triage:\n%s' "$rubric" "$body")
+          jq -nc \
+            --arg r "$(echo "$prompt" | head -c 200)" \
+            '{labels: ["kind/chore","area/core","priority/low"],
+              body_fill: {severity:null, repro:null, acceptance:["Manual triage"], out_of_scope:[]},
+              confidence: 0.0,
+              needs_human: true,
+              reasoning: "REST agent endpoint not configured; routing to humans"}' > /tmp/agent.json
+          echo "method=rest" >> "$GITHUB_OUTPUT"
+
+      - if: steps.skip.outputs.skip == 'false'
+        name: Validate + apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          THRESHOLD: ${{ inputs.confidence-threshold }}
+        run: |
+          set -e
+          validated=$(jq -c . /tmp/agent.json |
+            bash rs/.github/scripts/triage-validate.sh rs/labels.yml "$THRESHOLD")
+          echo "$validated" | bash rs/.github/scripts/triage-apply.sh "$REPO" "$ISSUE"
+          method="${{ steps.copilot.outputs.method || steps.rest.outputs.method }}"
+          outcome=$(echo "$validated" | jq -r 'if .needs_human then "needs_human" else "applied" end')
+          echo "$validated" | bash rs/.github/scripts/triage-audit.sh "$REPO" "$ISSUE" "$method" "$outcome"
+
+      - if: always() && steps.skip.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-audit-${{ github.run_id }}
+          path: triage-audit.jsonl
+          retention-days: 90

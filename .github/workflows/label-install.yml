@@ -58,16 +58,12 @@ jobs:
             if echo "$existing" | grep -qx "$name"; then
               gh api "repos/$REPO/labels/$(printf '%s' "$name" | jq -sRr @uri)" \
                 -X PATCH \
-                --field new_name="$name" \
-                --field color="$color" \
-                --field description="$desc" >/dev/null
+                --input - <<< "{\"new_name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}" >/dev/null
               echo "  patched: $name"
             else
               gh api "repos/$REPO/labels" \
                 -X POST \
-                --field name="$name" \
-                --field color="$color" \
-                --field description="$desc" >/dev/null
+                --input - <<< "{\"name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}" >/dev/null
               echo "  created: $name"
             fi
           done

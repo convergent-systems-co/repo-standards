@@ -52,7 +52,7 @@ jobs:
           # Create or patch each standard label
           for i in $(seq 0 $((count - 1))); do
             name=$(yq -r ".labels[$i].name" /tmp/labels.yml)
-            color=$(yq -r ".labels[$i].color" /tmp/labels.yml)
+            color=$(yq -r '.labels['$i'].color | tostring' /tmp/labels.yml)
             desc=$(yq -r ".labels[$i].description" /tmp/labels.yml)
 
             if echo "$existing" | grep -qx "$name"; then

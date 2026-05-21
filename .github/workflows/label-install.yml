@@ -1,0 +1,97 @@
+# Reusable workflow: install / sync the standard label set into the caller repo.
+# Consumers invoke via:
+#   uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@v1
+#
+# Idempotent: re-running this workflow is safe; it patches existing labels and
+# creates missing ones. It does NOT delete any labels — that is the job of
+# label-cleanup.yml.
+
+name: Install labels
+
+on:
+  workflow_call:
+    inputs:
+      labels-ref:
+        description: "Git ref of repo-standards to pull labels.yml from"
+        type: string
+        default: "v1"
+      delete-others:
+        description: "If true, deletes any label in the caller repo that is not in labels.yml. Default false — cleanup handles deletion."
+        type: boolean
+        default: false
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Fetch labels.yml from repo-standards
+        run: |
+          curl -fsSL \
+            "https://raw.githubusercontent.com/convergent-systems-co/repo-standards/${{ inputs.labels-ref }}/labels.yml" \
+            -o /tmp/labels.yml
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Sync labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DELETE_OTHERS: ${{ inputs.delete-others }}
+        run: |
+          set -euo pipefail
+          count=$(yq '.labels | length' /tmp/labels.yml)
+          echo "Syncing $count labels into $REPO"
+
+          # Fetch existing labels (paginated)
+          existing=$(gh api "repos/$REPO/labels" --paginate --jq '.[].name' | sort -u)
+
+          # Create or patch each standard label
+          for i in $(seq 0 $((count - 1))); do
+            name=$(yq -r ".labels[$i].name" /tmp/labels.yml)
+            color=$(yq -r ".labels[$i].color" /tmp/labels.yml)
+            desc=$(yq -r ".labels[$i].description" /tmp/labels.yml)
+
+            if echo "$existing" | grep -qx "$name"; then
+              gh api "repos/$REPO/labels/$(printf '%s' "$name" | jq -sRr @uri)" \
+                -X PATCH \
+                --field new_name="$name" \
+                --field color="$color" \
+                --field description="$desc" >/dev/null
+              echo "  patched: $name"
+            else
+              gh api "repos/$REPO/labels" \
+                -X POST \
+                --field name="$name" \
+                --field color="$color" \
+                --field description="$desc" >/dev/null
+              echo "  created: $name"
+            fi
+          done
+
+          # Optional: delete labels not in standard (off by default)
+          if [ "$DELETE_OTHERS" = "true" ]; then
+            standard_names=$(yq -r '.labels[].name' /tmp/labels.yml | sort -u)
+            for name in $existing; do
+              if ! echo "$standard_names" | grep -qx "$name"; then
+                gh api "repos/$REPO/labels/$(printf '%s' "$name" | jq -sRr @uri)" \
+                  -X DELETE >/dev/null
+                echo "  deleted: $name"
+              fi
+            done
+          fi
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Label install complete"
+            echo ""
+            echo "- Source: \`labels.yml@${{ inputs.labels-ref }}\`"
+            echo "- Repo: ${{ github.repository }}"
+            echo "- delete-others: ${{ inputs.delete-others }}"
+          } >> "$GITHUB_STEP_SUMMARY"

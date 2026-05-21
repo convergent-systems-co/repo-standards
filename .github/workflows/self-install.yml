@@ -1,0 +1,11 @@
+name: Self-install labels (dogfood)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@main
+    with:
+      labels-ref: main
+      delete-others: false

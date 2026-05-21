@@ -1,0 +1,11 @@
+name: Self-install labels (dogfood)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    uses: ./.github/workflows/label-install.yml
+    with:
+      labels-ref: main
+      delete-others: false

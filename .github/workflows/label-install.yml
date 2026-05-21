@@ -23,8 +23,6 @@ on:
 jobs:
   install:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
       - name: Fetch labels.yml from repo-standards
         run: |

@@ -1,0 +1,21 @@
+# Legacy / non-standard label → canonical mapping.
+# Used by label-cleanup.yml. `null` means: do not auto-migrate; flag in report.
+
+aliases:
+  # GitHub defaults
+  bug:                kind/bug
+  documentation:      kind/docs
+  duplicate:          resolution/duplicate
+  enhancement:        kind/enhancement
+  "good first issue": good-first-issue
+  "help wanted":      help-wanted
+  invalid:            resolution/invalid
+  wontfix:            resolution/wontfix
+  question:           null
+  # Common drift seen in third-party templates
+  feature:            kind/feature
+  feature-request:    kind/feature
+  bugfix:             kind/bug
+  ci:                 area/ci
+  infra:              area/infra
+  docs:               kind/docs

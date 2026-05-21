@@ -1,0 +1,8 @@
+name: Call label-install
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@main

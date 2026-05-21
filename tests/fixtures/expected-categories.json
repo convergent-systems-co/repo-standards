@@ -1,0 +1,6 @@
+{
+  "standard":  ["kind/bug", "area/core"],
+  "aliased":   [{"from": "bug", "to": "kind/bug"}, {"from": "documentation", "to": "kind/docs"}],
+  "ambiguous": ["question"],
+  "unmapped":  ["wishlist"]
+}

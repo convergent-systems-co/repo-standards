@@ -1,0 +1,7 @@
+[
+  {"n": 1,  "labels": ["bug", "area/core"]},
+  {"n": 2,  "labels": ["documentation"]},
+  {"n": 3,  "labels": ["question"]},
+  {"n": 4,  "labels": ["wishlist"]},
+  {"n": 5,  "labels": ["kind/bug", "area/core"]}
+]

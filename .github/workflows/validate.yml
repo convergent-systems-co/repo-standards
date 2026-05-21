@@ -1,0 +1,31 @@
+# CI validation: runs on every PR and on push to main.
+# Lints YAML, validates label/alias schema, runs bats tests, lints workflows.
+
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq + bats + actionlint
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          sudo apt-get update -qq
+          sudo apt-get install -y bats
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run bats tests
+        run: bats tests/
+
+      - name: Lint workflows
+        run: actionlint .github/workflows/*.yml

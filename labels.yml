@@ -1,0 +1,39 @@
+# Source of truth for convergent-systems-co label standard.
+# Owned by repo-standards. Changes require PR + CODEOWNER review.
+# Consumers install via: repo-standards/.github/workflows/label-install.yml@v1
+
+labels:
+  # KIND
+  - { name: kind/bug,          color: "d73a4a", description: "Something is broken" }
+  - { name: kind/feature,      color: "0e8a16", description: "Net-new capability" }
+  - { name: kind/enhancement,  color: "a2eeef", description: "Improvement to existing capability" }
+  - { name: kind/docs,         color: "0075ca", description: "Documentation" }
+  - { name: kind/refactor,     color: "fbca04", description: "Behavior-preserving change" }
+  - { name: kind/chore,        color: "cccccc", description: "Build / CI / tooling / housekeeping" }
+  - { name: kind/security,     color: "b60205", description: "Vulnerability or hardening" }
+  - { name: kind/rfc,          color: "5319e7", description: "Design proposal or discussion" }
+  # AREA
+  - { name: area/api,          color: "1d76db", description: "Public API / interface" }
+  - { name: area/cli,          color: "1d76db", description: "Command-line surface" }
+  - { name: area/core,         color: "1d76db", description: "Domain / business logic" }
+  - { name: area/infra,        color: "1d76db", description: "Terraform / cloud / deployment" }
+  - { name: area/ci,           color: "1d76db", description: "GitHub Actions / pipelines" }
+  - { name: area/docs,         color: "1d76db", description: "Documentation surface" }
+  - { name: area/release,      color: "1d76db", description: "Packaging / publishing" }
+  # PRIORITY
+  - { name: priority/critical, color: "b60205", description: "Drop everything" }
+  - { name: priority/high,     color: "d93f0b", description: "Current iteration" }
+  - { name: priority/medium,   color: "fbca04", description: "Next iteration" }
+  - { name: priority/low,      color: "0e8a16", description: "Backlog" }
+  # STATUS
+  - { name: status/triage,     color: "ededed", description: "Awaiting triage (auto-applied on open)" }
+  - { name: status/needs-info, color: "ededed", description: "Author input required" }
+  - { name: status/blocked,    color: "5319e7", description: "External dependency" }
+  # RESOLUTION
+  - { name: resolution/duplicate,  color: "cfd3d7", description: "Already exists (link required)" }
+  - { name: resolution/wontfix,    color: "ffffff", description: "Out of scope / by design" }
+  - { name: resolution/invalid,    color: "e4e669", description: "Cannot reproduce / not actionable" }
+  - { name: resolution/completed,  color: "c2e0c6", description: "Shipped" }
+  # COMMUNITY
+  - { name: good-first-issue,  color: "7057ff", description: "Newcomer-friendly" }
+  - { name: help-wanted,       color: "008672", description: "Maintainer wants outside contribution" }

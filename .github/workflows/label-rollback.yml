@@ -1,0 +1,52 @@
+name: Label rollback (destructive)
+
+on:
+  workflow_call:
+    inputs:
+      run-id:
+        description: "github.run_id of the cleanup run whose snapshot to restore from"
+        type: string
+        required: true
+      dry-run:
+        type: boolean
+        default: true
+
+# NOTE: No permissions block at reusable level. Callers grant:
+#   permissions: issues: write, contents: read, actions: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: v1
+          path: rs
+
+      - name: Download snapshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanup-snapshot-${{ inputs.run-id }}
+          path: .
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run-id }}
+
+      - name: Confirm prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          test -f snapshot.json
+          [ "$(jq -r .repo snapshot.json)" = "$REPO" ] || {
+            echo "ERROR: snapshot.repo does not match this repo" >&2
+            exit 1
+          }
+
+      - name: Restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY: ${{ inputs.dry-run }}
+        run: |
+          bash rs/.github/scripts/cleanup-rollback.sh "$REPO" snapshot.json "$DRY"

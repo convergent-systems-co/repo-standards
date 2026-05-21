@@ -1,8 +1,0 @@
-name: Call simple reusable
-
-on:
-  workflow_dispatch:
-
-jobs:
-  caller:
-    uses: convergent-systems-co/repo-standards/.github/workflows/simple-reusable.yml@main

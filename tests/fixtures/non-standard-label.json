@@ -1,0 +1,7 @@
+{
+  "labels": ["kind/bug", "area/cli", "priority/yolo"],
+  "body_fill": {"severity": "high", "repro": null, "acceptance": ["x"], "out_of_scope": []},
+  "confidence": 0.85,
+  "needs_human": false,
+  "reasoning": "priority/yolo is not in labels.yml"
+}

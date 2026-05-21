@@ -1,0 +1,7 @@
+{
+  "labels": ["kind/rfc", "area/core", "priority/low"],
+  "body_fill": {"severity": null, "repro": null, "acceptance": ["x"], "out_of_scope": []},
+  "confidence": 0.45,
+  "needs_human": true,
+  "reasoning": "Open-ended question"
+}

@@ -1,0 +1,42 @@
+name: Label sync
+
+on:
+  workflow_call:
+    inputs:
+      labels-ref:
+        type: string
+        default: "v1"
+  repository_dispatch:
+    types: [label-sync]
+
+# NOTE: No permissions block at reusable level. Callers grant:
+#   permissions: issues: write, contents: read
+
+jobs:
+  install:
+    permissions:
+      issues: write
+      contents: read
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@v1
+    with:
+      labels-ref: ${{ inputs.labels-ref || 'v1' }}
+      delete-others: false
+
+  notify:
+    needs: install
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      REF: ${{ inputs.labels-ref || 'v1' }}
+    steps:
+      - name: Comment on tracking issue (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tracker=$(gh issue list --repo "$REPO" \
+            --search "Org label standard tracker in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$tracker" ]; then
+            gh issue comment "$tracker" --repo "$REPO" \
+              --body "Label set synced from \`repo-standards@$REF\` on $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+          fi

@@ -1,0 +1,4 @@
+rules:
+  shellcheck:
+    disable:
+      - SC2102  # False positive on bracket ranges in JSON/GraphQL payloads

@@ -1,0 +1,74 @@
+name: Fanout label changes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - labels.yml
+      - label-aliases.yml
+  workflow_dispatch:
+    inputs:
+      labels-ref:
+        type: string
+        default: "v1"
+      stagger-minutes:
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+jobs:
+  fanout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enumerate consumer repos with convergent-standards topic
+        id: repos
+        env:
+          GH_TOKEN: ${{ secrets.ORG_FANOUT_TOKEN || github.token }}
+          QUERY: |
+            query($cursor: String) {
+              search(query: "org:convergent-systems-co topic:convergent-standards", type: REPOSITORY, first: 100, after: $cursor) {
+                pageInfo { hasNextPage endCursor }
+                nodes { ... on Repository { nameWithOwner } }
+              }
+            }
+        run: |
+          gh api graphql -f query="$QUERY" --paginate --jq '.data.search.nodes[].nameWithOwner' > repos.txt
+          wc -l repos.txt
+          echo "count=$(wc -l < repos.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch label-sync to each consumer (staggered)
+        if: steps.repos.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_FANOUT_TOKEN || github.token }}
+          REF: ${{ inputs.labels-ref || 'v1' }}
+        run: |
+          i=0
+          while read -r repo; do
+            [ -z "$repo" ] && continue
+            i=$((i + 1))
+            if [ "$i" -gt 100 ]; then
+              echo "Capped at 100 dispatches per run; remaining: $(($(wc -l < repos.txt) - i + 1))" >&2
+              break
+            fi
+            printf "%d. Dispatching label-sync to %s\n" "$i" "$repo"
+            PAYLOAD="{\"labels-ref\": \"$REF\"}"
+            gh api -X POST "repos/$repo/dispatches" \
+              -f event_type=label-sync \
+              -f client_payload="$PAYLOAD" >/dev/null \
+              || echo "  WARN: dispatch failed for $repo (may not have label-sync.yml)"
+            sleep 6
+          done < repos.txt
+
+      - name: Summary
+        env:
+          COUNT: ${{ steps.repos.outputs.count }}
+          REF: ${{ inputs.labels-ref || 'v1' }}
+        run: |
+          # shellcheck disable=SC2129
+          {
+            echo "## Fanout summary"
+            echo "- Repos enumerated: $COUNT"
+            echo "- Ref dispatched: $REF"
+          } >> "$GITHUB_STEP_SUMMARY"

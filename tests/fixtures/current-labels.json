@@ -1,0 +1,8 @@
+[
+  {"name": "kind/bug", "color": "d73a4a"},
+  {"name": "bug", "color": "ee0701"},
+  {"name": "documentation", "color": "0075ca"},
+  {"name": "question", "color": "d876e3"},
+  {"name": "wishlist", "color": "fef2c0"},
+  {"name": "area/core", "color": "1d76db"}
+]

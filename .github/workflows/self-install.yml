@@ -5,7 +5,7 @@ on:
 
 jobs:
   install:
-    uses: ./.github/workflows/label-install.yml
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@main
     with:
       labels-ref: main
       delete-others: false

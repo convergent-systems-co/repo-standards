@@ -1,0 +1,10 @@
+name: Test minimal call
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    uses: convergent-systems-co/repo-standards/.github/workflows/label-install.yml@v1.0.0-dogfood
+    with:
+      labels-ref: main

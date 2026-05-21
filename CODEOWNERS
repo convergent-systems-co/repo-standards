@@ -1,0 +1,9 @@
+# Label standard requires deliberate review.
+# Changes to the source of truth must be approved by maintainers.
+
+labels.yml          @convergent-systems-co/maintainers
+label-aliases.yml   @convergent-systems-co/maintainers
+docs/triage-rubric.md @convergent-systems-co/maintainers
+
+# All reusable workflows
+.github/workflows/  @convergent-systems-co/maintainers

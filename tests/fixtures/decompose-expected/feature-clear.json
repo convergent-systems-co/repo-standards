@@ -1,0 +1,24 @@
+{
+  "parent_level": "feature",
+  "child_level": "story",
+  "confidence": 0.8,
+  "needs_human": false,
+  "reasoning": "OAuth2 flow decomposes into the three deliverables explicit in the body's acceptance section.",
+  "children": [
+    {
+      "title": "Sign-in button + redirect to Google consent",
+      "body": "Add a 'Sign in with Google' button on the login page; clicking redirects to the Google OAuth consent screen.\n\n**Acceptance:**\n- Button visible on /login\n- Click triggers redirect to Google consent\n- State parameter carried correctly",
+      "labels": ["agile/story", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "OAuth callback handler + session establishment",
+      "body": "Implement /auth/google/callback to exchange the code for tokens, fetch the user profile, and establish a session.\n\n**Acceptance:**\n- Valid code → session cookie set, redirect to /home\n- Invalid code → /login with error",
+      "labels": ["agile/story", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Failed-consent error UX",
+      "body": "When Google consent is denied, return the user to /login with a clear error message.\n\n**Acceptance:**\n- Decline path shows 'You did not authorize sign-in.'\n- No partial session is created",
+      "labels": ["agile/story", "kind/feature", "area/core", "priority/medium"]
+    }
+  ]
+}

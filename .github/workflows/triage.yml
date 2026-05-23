@@ -15,7 +15,7 @@ on:
       rubric-ref:
         description: "Git ref of repo-standards for triage-rubric.md + labels.yml"
         type: string
-        default: "v1"
+        default: "v2"
       confidence-threshold:
         type: string
         default: "0.6"
@@ -25,8 +25,13 @@ on:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/triage'))
+    if: |
+      github.event_name == 'issues'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issue_comment'
+          && startsWith(github.event.comment.body, '/triage')
+          && !startsWith(github.event.comment.body, '/triage decompose')
+          && !startsWith(github.event.comment.body, '/triage approve-decomposition'))
     steps:
       - name: Resolve issue number
         id: meta

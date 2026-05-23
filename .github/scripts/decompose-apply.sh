@@ -30,9 +30,9 @@ for i in $(seq 0 $((child_count - 1))); do
   labels_with_triage=$(echo "$labels_json" | jq 'if index("status/triage") == null then . + ["status/triage"] else . end')
 
   # Idempotency: if a sub-issue with this title already exists under this parent, skip.
-  # Pipe gh output through local jq so the --jq flag is not required from gh itself.
+  # Use pipe-to-jq with --arg to avoid shell-injection via title content.
   existing=$(gh api "repos/$repo/issues/$parent/sub_issues" --paginate 2>/dev/null \
-    | jq -r "[.[] | select(.title == \"$title\")] | first // empty" 2>/dev/null \
+    | jq --arg t "$title" 'first(.[] | select(.title == $t)) // empty' 2>/dev/null \
     || echo "")
   if [ -n "$existing" ]; then
     existing_num=$(echo "$existing" | jq -r '.number')
@@ -42,10 +42,12 @@ for i in $(seq 0 $((child_count - 1))); do
   fi
 
   # Create the child issue
+  # Use -F (JSON-typed field) for labels so the array is sent as a JSON array,
+  # not a literal string. --raw-field/-f sends the value as-is (string only).
   child_resp=$(gh api -X POST "repos/$repo/issues" \
     -f "title=$title" \
     -f "body=$body_with_parent" \
-    --raw-field "labels=$(echo "$labels_with_triage" | jq -c .)" \
+    -F "labels=$(echo "$labels_with_triage" | jq -c .)" \
     2>/dev/null || true)
 
   child_num=$(echo "$child_resp" | jq -r '.number // empty')
@@ -64,7 +66,16 @@ for i in $(seq 0 $((child_count - 1))); do
   created_numbers+=("$child_num")
 done
 
-# Per spec §7.1: parent's status/triage is removed when decomposition is signaled-complete
+# Partial failure: do NOT post the applied-marker so the caller can retry.
+if [ "$failed_count" -gt 0 ]; then
+  echo "WARN: $failed_count children failed to create; re-run /triage approve-decomposition to retry" >&2
+  echo "Partial failure: $failed_count of $child_count children not created. Applied-marker NOT posted; safe to retry." >&2
+  exit 1
+fi
+
+# Full success only: remove status/triage from parent and post applied-marker.
+# Doing this after the failure-check prevents the marker from blocking retries
+# when some children were not created (per spec §7.1 idempotency contract).
 gh issue edit "$parent" --repo "$repo" --remove-label "status/triage" >/dev/null 2>&1 || true
 
 # Post applied-marker comment
@@ -76,8 +87,3 @@ fi
 gh issue comment "$parent" --repo "$repo" --body "Decomposition applied. Created: $created_list
 
 <!-- triage:applied:v2:sha=$proposal_sha -->" >/dev/null
-
-if [ "$failed_count" -gt 0 ]; then
-  echo "WARN: $failed_count children failed to create; re-run /triage approve-decomposition to retry" >&2
-  exit 1
-fi

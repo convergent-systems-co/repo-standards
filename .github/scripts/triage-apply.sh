@@ -3,7 +3,10 @@
 #   stdin:  validated JSON from triage-validate.sh
 #   side effects:
 #     - applies suggested labels
-#     - removes status/triage if needs_human=false
+#     - removes status/triage only when classification is a plan-tree leaf
+#       (agile/task, kind/hook, kind/finding)
+#     - keeps status/triage on decomposable parents (agile/{epic,feature,story})
+#       so the decompose workflow picks them up
 #     - adds status/needs-info if needs_human=true
 #     - inserts body_fill sections at top of issue body, above an HR separator
 #     - posts a single audit comment

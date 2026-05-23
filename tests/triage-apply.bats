@@ -3,6 +3,8 @@
 # Tests for triage-apply.sh status/triage lifecycle decisions.
 # Mock gh by overriding it on PATH; capture invocations to a temp log.
 
+SCRIPT="$BATS_TEST_DIRNAME/../.github/scripts/triage-apply.sh"
+
 setup() {
   # Ensure bash 4+ is on PATH (macOS ships bash 3.2; homebrew provides 5+).
   # triage-apply.sh uses mapfile which requires bash 4+.
@@ -25,7 +27,7 @@ EOF
     "labels":["kind/feature","area/core","priority/medium","agile/task"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.9,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -34,7 +36,7 @@ EOF
     "labels":["kind/hook","area/ci","priority/low"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.9,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -43,7 +45,7 @@ EOF
     "labels":["kind/finding","area/core","priority/medium"],
     "body_fill":{"severity":"medium","repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.9,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -52,7 +54,7 @@ EOF
     "labels":["kind/feature","area/core","priority/medium","agile/epic"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.85,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -61,7 +63,7 @@ EOF
     "labels":["kind/feature","area/core","priority/medium","agile/feature"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.85,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -70,7 +72,7 @@ EOF
     "labels":["kind/feature","area/core","priority/medium","agile/story"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.88,"needs_human":false,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
@@ -79,7 +81,7 @@ EOF
     "labels":["kind/rfc","area/core","priority/low"],
     "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
     "confidence":0.4,"needs_human":true,"reasoning":"x"
-  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  }' | bash "$SCRIPT" test/repo 1
   grep -q "add-label status/needs-info" "$BATS_TEST_TMPDIR/gh.log"
   ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }

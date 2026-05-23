@@ -65,6 +65,15 @@ EOF
   ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
 }
 
+@test "apply: agile/story decomposable → status/triage STAYS" {
+  echo '{
+    "labels":["kind/feature","area/core","priority/medium","agile/story"],
+    "body_fill":{"severity":null,"repro":null,"acceptance":["x"],"out_of_scope":[]},
+    "confidence":0.88,"needs_human":false,"reasoning":"x"
+  }' | bash .github/scripts/triage-apply.sh test/repo 1
+  ! grep -q "remove-label status/triage" "$BATS_TEST_TMPDIR/gh.log"
+}
+
 @test "apply: needs_human=true → status/needs-info ADDED, triage stays" {
   echo '{
     "labels":["kind/rfc","area/core","priority/low"],

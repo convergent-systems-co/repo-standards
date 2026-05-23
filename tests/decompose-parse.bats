@@ -2,7 +2,7 @@
 
 bats_require_minimum_version 1.5.0
 
-SCRIPT=.github/scripts/decompose-parse.sh
+SCRIPT="$BATS_TEST_DIRNAME/../.github/scripts/decompose-parse.sh"
 
 @test "decompose-parse: extracts JSON from a single proposal comment" {
   cat > "$BATS_TEST_TMPDIR/comments.json" <<'EOF'

@@ -24,9 +24,22 @@ while read -r label; do
   gh issue edit "$issue" --repo "$repo" --add-label "$label" >/dev/null
 done <<< "$labels"
 
-# Status handling
+# Status handling (v2): leaf-only status/triage removal.
+# Removed on confident classification ONLY when the issue is a plan-tree leaf
+# (agile/task, kind/hook, kind/finding). For decomposable types
+# (agile/{epic,feature,story}), status/triage stays because the decompose
+# workflow is about to fire — work remains.
+is_decomposable=$(echo "$json" | jq -r '
+  .labels
+  | (index("agile/epic") != null) or
+    (index("agile/feature") != null) or
+    (index("agile/story") != null)
+')
+
 if [ "$needs_human" = "true" ]; then
   gh issue edit "$issue" --repo "$repo" --add-label "status/needs-info" >/dev/null
+elif [ "$is_decomposable" = "true" ]; then
+  : # keep status/triage — decompose workflow will fire
 else
   gh issue edit "$issue" --repo "$repo" --remove-label "status/triage" >/dev/null
 fi

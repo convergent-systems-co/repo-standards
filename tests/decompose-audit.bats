@@ -14,7 +14,7 @@ SCRIPT="$BATS_TEST_DIRNAME/../.github/scripts/decompose-audit.sh"
   echo "$line" | jq -e '.issue == 42' >/dev/null
   echo "$line" | jq -e '.outcome == "proposed"' >/dev/null
   echo "$line" | jq -e '.child_count == 2' >/dev/null
-  echo "$line" | jq -e '.chronon | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}")' >/dev/null
+  echo "$line" | jq -e '.chronon | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")' >/dev/null
 }
 
 @test "decompose-audit: appends a JSONL line for approve event" {
@@ -27,7 +27,7 @@ SCRIPT="$BATS_TEST_DIRNAME/../.github/scripts/decompose-audit.sh"
   echo "$line" | jq -e '.actor == "alice"' >/dev/null
   echo "$line" | jq -e '.author_association == "MEMBER"' >/dev/null
   echo "$line" | jq -e '.outcome == "applied"' >/dev/null
-  echo "$line" | jq -e '.chronon | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}")' >/dev/null
+  echo "$line" | jq -e '.chronon | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$")' >/dev/null
 }
 
 @test "decompose-audit: propose event includes proposal_sha" {

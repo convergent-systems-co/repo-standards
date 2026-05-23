@@ -12,7 +12,7 @@
 set -euo pipefail
 
 event="$1"; repo="$2"; issue="$3"
-chronon="$(date -u +%Y-%m-%dT%H:%M:%S)"
+chronon="$(python3 -c "from datetime import datetime, timezone; n=datetime.now(timezone.utc); print(n.strftime('%Y-%m-%dT%H:%M:%S.') + f'{n.microsecond//1000:03d}Z')")"
 input=$(cat || echo '{}')
 
 case "$event" in

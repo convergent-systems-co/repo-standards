@@ -1,0 +1,17 @@
+{
+  "labels": ["kind/feature", "area/core", "priority/medium", "agile/feature"],
+  "body_fill": {
+    "severity": null,
+    "repro": null,
+    "acceptance": [
+      "User can click Sign in with Google",
+      "Redirect to Google consent succeeds",
+      "Successful consent establishes a session",
+      "Failed consent shows a clear error"
+    ],
+    "out_of_scope": []
+  },
+  "confidence": 0.9,
+  "needs_human": false,
+  "reasoning": "Single capability (Google OAuth login) with multiple acceptance criteria — feature-level."
+}

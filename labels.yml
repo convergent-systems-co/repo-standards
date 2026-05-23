@@ -37,3 +37,11 @@ labels:
   # COMMUNITY
   - { name: good-first-issue,  color: "7057ff", description: "Newcomer-friendly" }
   - { name: help-wanted,       color: "008672", description: "Maintainer wants outside contribution" }
+  # KIND additions for v2 — leaf-observation work-types
+  - { name: kind/hook,         color: "8a2be2", description: "Process hook / integration point — leaf" }
+  - { name: kind/finding,      color: "ff6347", description: "Observation / report from a process — leaf" }
+  # AGILE family — plan-tree position (v2 new family)
+  - { name: agile/epic,        color: "7b3fa6", description: "Plan-tree: epic level, decomposes into features" }
+  - { name: agile/feature,     color: "9d5cb8", description: "Plan-tree: feature level, decomposes into stories" }
+  - { name: agile/story,       color: "bf79c9", description: "Plan-tree: story level, decomposes into tasks" }
+  - { name: agile/task,        color: "dfa5dc", description: "Plan-tree: task level — leaf" }

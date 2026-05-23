@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 
-@test "labels.yml has 28 entries" {
+@test "labels.yml has 34 entries" {
   count=$(yq '.labels | length' labels.yml)
-  [ "$count" -eq 28 ]
+  [ "$count" -eq 34 ]
 }
 
 @test "every label has name, color, description" {
@@ -35,4 +35,29 @@
   total=$(yq '.labels | length' labels.yml)
   unique=$(yq '[.labels[].name] | unique | length' labels.yml)
   [ "$total" -eq "$unique" ]
+}
+
+@test "labels.yml contains the agile/ family at v2" {
+  for name in agile/epic agile/feature agile/story agile/task; do
+    run yq -r ".labels[] | select(.name == \"$name\") | .name" labels.yml
+    [ "$status" -eq 0 ]
+    [ "$output" = "$name" ]
+  done
+}
+
+@test "labels.yml contains kind/hook and kind/finding at v2" {
+  for name in kind/hook kind/finding; do
+    run yq -r ".labels[] | select(.name == \"$name\") | .name" labels.yml
+    [ "$status" -eq 0 ]
+    [ "$output" = "$name" ]
+  done
+}
+
+@test "labels.yml has both kind/feature and agile/feature (legal coexistence)" {
+  # The kind/* and agile/* prefixes are orthogonal taxonomies.
+  # Both 'feature' members coexist on purpose; this confirms it.
+  run yq -r '.labels[] | select(.name == "kind/feature") | .name' labels.yml
+  [ "$output" = "kind/feature" ]
+  run yq -r '.labels[] | select(.name == "agile/feature") | .name' labels.yml
+  [ "$output" = "agile/feature" ]
 }

@@ -1,0 +1,12 @@
+{
+  "labels": ["kind/feature", "area/core", "priority/medium", "agile/task"],
+  "body_fill": {
+    "severity": null,
+    "repro": null,
+    "acceptance": ["auth/google_oauth_test.go covers valid code, invalid code, and network error cases."],
+    "out_of_scope": []
+  },
+  "confidence": 0.92,
+  "needs_human": false,
+  "reasoning": "Single concrete action — add specific unit tests. Hours-scale, no further decomposition needed — task-level."
+}

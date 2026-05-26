@@ -1,0 +1,59 @@
+name: Rubric Eval
+
+on:
+  pull_request:
+    paths:
+      - 'docs/triage-rubric.md'
+      - 'docs/decompose-rubric.md'
+      - 'tests/fixtures/**'
+      - '.github/scripts/triage-validate.sh'
+      - '.github/scripts/decompose-validate.sh'
+      - 'labels.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  classify-rubric-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq + bats
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Validate each expected classification JSON against labels.yml
+        run: |
+          set -e
+          for f in tests/fixtures/expected/*.json; do
+            echo "=== $f ==="
+            jq -c . "$f" | bash .github/scripts/triage-validate.sh labels.yml 0.6 >/dev/null
+          done
+
+      - name: Validate each expected decomposition JSON
+        run: |
+          set -e
+          for f in tests/fixtures/decompose-expected/*.json; do
+            echo "=== $f ==="
+            jq -c . "$f" | bash .github/scripts/decompose-validate.sh labels.yml 0.7 >/dev/null
+          done
+
+  bats-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq + bats + jq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          sudo apt-get update && sudo apt-get install -y bats jq
+
+      - name: Run bats suite
+        run: bats tests/

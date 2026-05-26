@@ -1,0 +1,12 @@
+{
+  "labels": ["kind/finding", "area/core", "priority/medium"],
+  "body_fill": {
+    "severity": "medium",
+    "repro": null,
+    "acceptance": ["Null-check added in internal/users/user.go:42 and a regression test prevents panic."],
+    "out_of_scope": ["The original PR #347."]
+  },
+  "confidence": 0.9,
+  "needs_human": false,
+  "reasoning": "Code-review observation — kind/finding leaf, separate from the PR that surfaced it."
+}

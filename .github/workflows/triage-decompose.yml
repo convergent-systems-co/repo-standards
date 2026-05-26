@@ -1,0 +1,434 @@
+# Reusable workflow: agentic issue decomposition.
+# Consumers invoke via:
+#   uses: convergent-systems-co/repo-standards/.github/workflows/triage-decompose.yml@v2
+# Callers MUST grant: permissions: issues: write, contents: read
+
+name: Triage Decompose
+
+on:
+  workflow_call:
+    inputs:
+      agent_mode:
+        description: "copilot-then-rest | copilot-only | rest-only"
+        type: string
+        default: "copilot-then-rest"
+      rubric-ref:
+        description: "Git ref of repo-standards for decompose-rubric.md + labels.yml"
+        type: string
+        default: "v2"
+      decomposition-confidence-threshold:
+        type: string
+        default: "0.7"
+      dry_run:
+        description: "If true, skip mutating API calls; print intent only."
+        type: boolean
+        default: false
+
+# Callers grant permissions.
+
+jobs:
+  propose:
+    if: |
+      (github.event_name == 'issues'
+        && github.event.action == 'labeled'
+        && (github.event.label.name == 'agile/epic'
+            || github.event.label.name == 'agile/feature'
+            || github.event.label.name == 'agile/story'))
+      || (github.event_name == 'issue_comment'
+        && startsWith(github.event.comment.body, '/triage decompose')
+        && !startsWith(github.event.comment.body, '/triage approve-decomposition'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo-standards
+        uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: ${{ inputs.rubric-ref }}
+          path: rs
+
+      - name: Install tooling
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Resolve issue number
+        id: meta
+        run: |
+          echo "issue=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Body-hash idempotency check
+        id: idem
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          body=$(gh issue view "$ISSUE" --repo "$REPO" --json body --jq .body \
+            | bash rs/.github/scripts/triage-redact.sh)
+          current_sha=$(echo -n "$body" | shasum -a 256 | cut -c1-12)
+          echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
+
+          existing=$(gh api "repos/$REPO/issues/$ISSUE/comments" --paginate \
+            | jq -r '[.[] | select(.body | test("triage:proposal:v2:sha="))] | sort_by(.created_at) | reverse | .[0].body // empty' \
+            | grep -oE 'sha=[a-f0-9]{12}' | head -1 | cut -d= -f2 || echo "")
+          if [ "$existing" = "$current_sha" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.idem.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          echo "Proposal marker matches current body hash; nothing to do."
+          bash rs/.github/scripts/decompose-audit.sh propose "$REPO" "$ISSUE" \
+            none skipped_no_drift "${{ steps.idem.outputs.current_sha }}" \
+            "${{ steps.idem.outputs.current_sha }}" "${{ github.run_id }}" <<< '{"children":[]}'
+
+      - if: steps.idem.outputs.skip == 'false'
+        name: Determine parent level from labels
+        id: parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          labels=$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '.labels[].name')
+          for lvl in epic feature story; do
+            if echo "$labels" | grep -qx "agile/$lvl"; then
+              echo "level=$lvl" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "ERROR: no decomposable agile/ label on issue; expected agile/{epic,feature,story}" >&2
+          exit 1
+
+      - if: steps.idem.outputs.skip == 'false'
+        name: Fetch + redact issue body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+        run: |
+          gh issue view "$ISSUE" --repo "$REPO" --json title,body \
+            --jq '"# " + .title + "\n\n" + .body' \
+            | bash rs/.github/scripts/triage-redact.sh > /tmp/issue.md
+
+      - if: steps.idem.outputs.skip == 'false' && (inputs.agent_mode == 'copilot-then-rest' || inputs.agent_mode == 'copilot-only')
+        id: copilot
+        name: Invoke Copilot with decompose rubric
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          LEVEL: ${{ steps.parent.outputs.level }}
+        run: |
+          rubric=$(cat rs/docs/decompose-rubric.md)
+          body=$(cat /tmp/issue.md)
+          prompt=$(printf '%s\n\n---\nParent issue (level: %s):\n%s' "$rubric" "$LEVEL" "$body")
+          gh api -X POST "repos/$REPO/issues/$ISSUE/assignees" \
+            -f assignees='["github-copilot[bot]"]' >/dev/null 2>&1 || true
+          gh issue comment "$ISSUE" --repo "$REPO" --body "$prompt" >/dev/null
+          for _ in $(seq 1 30); do
+            sleep 10
+            latest=$(gh api "repos/$REPO/issues/$ISSUE/comments" \
+              --jq '[.[] | select(.user.login | contains("copilot"))] | last // empty')
+            if [ -n "$latest" ]; then
+              echo "$latest" | jq -r .body > /tmp/agent.txt
+              if bash rs/.github/scripts/triage-parse.sh < /tmp/agent.txt > /tmp/agent.json 2>/dev/null; then
+                echo "method=copilot" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+          done
+          exit 1
+
+      - if: steps.idem.outputs.skip == 'false' && (steps.copilot.outcome == 'failure' || inputs.agent_mode == 'rest-only')
+        id: rest
+        name: REST agent fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          LEVEL: ${{ steps.parent.outputs.level }}
+        run: |
+          jq -nc --arg lvl "$LEVEL" '{
+            parent_level: $lvl,
+            child_level: (if $lvl == "epic" then "feature" elif $lvl == "feature" then "story" else "task" end),
+            confidence: 0.0,
+            needs_human: true,
+            reasoning: "REST agent endpoint not configured; routing to humans",
+            children: []
+          }' > /tmp/agent.json
+          echo "method=rest" >> "$GITHUB_OUTPUT"
+
+      - if: steps.idem.outputs.skip == 'false'
+        name: Validate proposal
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          THRESHOLD: ${{ inputs.decomposition-confidence-threshold }}
+        run: |
+          set +e
+          validated=$(jq -c . /tmp/agent.json \
+            | bash rs/.github/scripts/decompose-validate.sh rs/labels.yml "$THRESHOLD" 2>/tmp/verr)
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            verr=$(cat /tmp/verr || echo "(no detail)")
+            gh issue comment "$ISSUE" --repo "$REPO" --body "🤖 Decomposition validation failed: $verr — comment /triage decompose to re-attempt." >/dev/null
+            method="${{ steps.copilot.outputs.method || steps.rest.outputs.method }}"
+            bash rs/.github/scripts/decompose-audit.sh propose "$REPO" "$ISSUE" \
+              "$method" "validation_failed" "${{ steps.idem.outputs.current_sha }}" \
+              "${{ steps.idem.outputs.current_sha }}" "${{ github.run_id }}" <<< '{"children":[]}'
+            exit 0
+          fi
+          echo "$validated" > /tmp/validated.json
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.idem.outputs.skip == 'false' && steps.validate.outputs.ok == 'true'
+        name: Post proposal comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ steps.meta.outputs.issue }}
+          SHA: ${{ steps.idem.outputs.current_sha }}
+        run: |
+          v=$(cat /tmp/validated.json)
+          child_summary=$(echo "$v" | jq -r '.children[] | "- " + .title' | sed 's/^/  /')
+          reasoning=$(echo "$v" | jq -r .reasoning)
+          confidence=$(echo "$v" | jq -r .confidence)
+          json_pretty=$(echo "$v" | jq .)
+          method="${{ steps.copilot.outputs.method || steps.rest.outputs.method }}"
+          comment_body=$(cat <<EOF
+          🤖 Decomposition proposal (confidence: $confidence, agent: $method)
+
+          **Reasoning:** $reasoning
+
+          **Proposed children:**
+          $child_summary
+
+          **Full proposal JSON (edit this comment to adjust before approving):**
+
+          \`\`\`json
+          $json_pretty
+          \`\`\`
+
+          **Approve as-is:** comment \`/triage approve-decomposition\` below.
+          **Re-propose:** comment \`/triage decompose\` to re-run.
+
+          <!-- triage:proposal:v2:sha=$SHA -->
+          EOF
+          )
+          if ${{ inputs.dry_run }}; then
+            echo "[DRY RUN] Would post proposal comment:"
+            echo "$comment_body"
+            bash rs/.github/scripts/decompose-audit.sh propose "$REPO" "$ISSUE" \
+              "$method" "dry_run_proposed" "$SHA" \
+              "$SHA" "${{ github.run_id }}" < /tmp/validated.json
+          else
+            gh issue comment "$ISSUE" --repo "$REPO" --body "$comment_body" >/dev/null
+            bash rs/.github/scripts/decompose-audit.sh propose "$REPO" "$ISSUE" \
+              "$method" "proposed" "$SHA" \
+              "$SHA" "${{ github.run_id }}" < /tmp/validated.json
+          fi
+
+      - if: always() && steps.idem.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompose-audit-propose-${{ github.run_id }}
+          path: decompose-audit.jsonl
+          retention-days: 90
+
+  approve:
+    if: |
+      github.event_name == 'issue_comment'
+      && startsWith(github.event.comment.body, '/triage approve-decomposition')
+      && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo-standards
+        uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: ${{ inputs.rubric-ref }}
+          path: rs
+
+      - name: Install tooling
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Find latest proposal + extract JSON
+        id: extract
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set +e
+          comments=$(gh api "repos/$REPO/issues/$ISSUE/comments" --paginate)
+          payload=$(echo "$comments" | bash rs/.github/scripts/decompose-parse.sh 2>/tmp/sha)
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            gh issue comment "$ISSUE" --repo "$REPO" --body "🤖 No proposal found. Comment \`/triage decompose\` to propose one." >/dev/null
+            bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+              "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+              "missing_proposal" "none" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+            exit 0
+          fi
+          echo "$payload" > /tmp/proposal.json
+          sha=$(cat /tmp/sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Body-drift check
+        if: steps.extract.outputs.sha != ''
+        id: drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          PROPOSAL_SHA: ${{ steps.extract.outputs.sha }}
+        run: |
+          current_body=$(gh issue view "$ISSUE" --repo "$REPO" --json body --jq .body \
+            | bash rs/.github/scripts/triage-redact.sh)
+          current_sha=$(echo -n "$current_body" | shasum -a 256 | cut -c1-12)
+          echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
+          if [ "$current_sha" != "$PROPOSAL_SHA" ]; then
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Abort on body drift
+        if: steps.drift.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE" --repo "$REPO" --body "🤖 Issue body has changed since the proposal was generated. Comment \`/triage decompose\` to regenerate before approving." >/dev/null
+          bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+            "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+            "body_drift" "${{ steps.extract.outputs.sha }}" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+          exit 0
+
+      - name: Check applied-marker (idempotency)
+        if: steps.extract.outputs.sha != '' && steps.drift.outputs.drift == 'false'
+        id: applied
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          SHA: ${{ steps.extract.outputs.sha }}
+        run: |
+          if gh api "repos/$REPO/issues/$ISSUE/comments" --paginate \
+            | jq -r '.[].body' \
+            | grep -q "triage:applied:v2:sha=$SHA"; then
+            echo "already_applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.applied.outputs.already_applied == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+            "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+            "already_applied" "${{ steps.extract.outputs.sha }}" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+
+      - if: steps.extract.outputs.sha != '' && steps.drift.outputs.drift == 'false' && steps.applied.outputs.already_applied == 'false' && ! inputs.dry_run
+        name: Apply (create sub-issues)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          SHA: ${{ steps.extract.outputs.sha }}
+        run: |
+          set +e
+          cat /tmp/proposal.json \
+            | bash rs/.github/scripts/decompose-validate.sh rs/labels.yml "${{ inputs.decomposition-confidence-threshold }}" \
+            | bash rs/.github/scripts/decompose-apply.sh "$REPO" "$ISSUE" "$SHA"
+          pipe_status=("${PIPESTATUS[@]}")
+          validate_rc=${pipe_status[1]}
+          apply_rc=${pipe_status[2]}
+          set -e
+          if [ "$validate_rc" -ne 0 ]; then
+            echo "ERROR: decompose-validate failed (exit $validate_rc); apply skipped" >&2
+            bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+              "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+              "validation_failed" "$SHA" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+          elif [ "$apply_rc" -ne 0 ]; then
+            bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+              "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+              "partial_failure" "$SHA" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+          else
+            bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+              "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+              "applied" "$SHA" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+          fi
+
+      - if: steps.extract.outputs.sha != '' && steps.drift.outputs.drift == 'false' && steps.applied.outputs.already_applied == 'false' && inputs.dry_run
+        name: Apply (dry run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          SHA: ${{ steps.extract.outputs.sha }}
+        run: |
+          echo "[DRY RUN] Would create sub-issues from proposal:"
+          cat /tmp/proposal.json | bash rs/.github/scripts/decompose-validate.sh rs/labels.yml "${{ inputs.decomposition-confidence-threshold }}"
+          bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+            "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+            "dry_run_approved" "$SHA" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompose-audit-approve-${{ github.run_id }}
+          path: decompose-audit.jsonl
+          retention-days: 90
+
+  permission_denied_audit:
+    if: |
+      github.event_name == 'issue_comment'
+      && startsWith(github.event.comment.body, '/triage approve-decomposition')
+      && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo-standards
+        uses: actions/checkout@v4
+        with:
+          repository: convergent-systems-co/repo-standards
+          ref: ${{ inputs.rubric-ref }}
+          path: rs
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE" --repo "$REPO" --body "🤖 Approval refused: \`${{ github.event.comment.author_association }}\` is not permitted to approve decompositions. Ask an org member or invited collaborator." >/dev/null
+          bash rs/.github/scripts/decompose-audit.sh approve "$REPO" "$ISSUE" \
+            "${{ github.event.comment.user.login }}" "${{ github.event.comment.author_association }}" \
+            "permission_denied" "none" "${{ github.run_id }}" <<< '{"children_filed":[]}'
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompose-audit-denied-${{ github.run_id }}
+          path: decompose-audit.jsonl
+          retention-days: 90

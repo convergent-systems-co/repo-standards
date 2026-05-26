@@ -8,7 +8,12 @@ code fences, no commentary outside the JSON.
 
 ```json
 {
-  "labels": ["kind/<x>", "area/<x>", "priority/<x>"],
+  "labels": [
+    "kind/<bug|enhancement|feature|refactor|chore|security|rfc|docs|hook|finding>",
+    "area/<x>",
+    "priority/<critical|high|medium|low>",
+    "agile/<epic|feature|story|task>"
+  ],
   "body_fill": {
     "severity": "low|medium|high|critical|null",
     "repro": "string|null",
@@ -29,6 +34,9 @@ Rules:
 - `body_fill.acceptance` MUST contain at least one bullet — the criterion the closer will check.
 - `confidence` is your calibrated certainty in the label set, on [0.0, 1.0].
 - `needs_human` is true if any required field cannot be inferred from the issue.
+- `labels` MAY contain at most one `agile/*` label. It is REQUIRED when the issue describes a plan-tree node (something that decomposes, or a leaf `agile/task`). It is FORBIDDEN when the issue is a `kind/hook` or `kind/finding` (those sit outside the plan tree).
+- The two prefixes answer ORTHOGONAL questions: `kind/*` = "what kind of work is this?" (bug, feature, refactor, hook, finding, ...) and `agile/*` = "where does this sit in the plan tree?" (epic → feature → story → task). An issue may carry both (e.g., `kind/feature` + `agile/feature`). They are not redundant: a `kind/feature` issue could be at `agile/story` granularity if it's been scoped down. Choose each independently.
+- `kind/{hook, finding}` ⇔ no `agile/*` label. These are the only two combinations forbidden.
 
 ## Decision tree
 
@@ -44,6 +52,8 @@ Rules:
 | "vulnerability", "CVE", "auth bypass", "credential", "secret" | `kind/security` |
 | "proposal", "RFC", "design", "should we" | `kind/rfc` |
 | "docs", "README", "typo", "documentation" | `kind/docs` |
+| "hook", "integration point", "pre-commit", "pre-push", "post-commit" | `kind/hook` |
+| "finding", "noticed while reviewing", "observation", "audit result" | `kind/finding` |
 
 If multiple signals fire, prefer the more specific (`security` > `bug` > `enhancement` > `feature` > `chore`).
 
@@ -72,12 +82,34 @@ Never invent.
 | Default — most bugs and features | `priority/medium` |
 | Cosmetic, nice-to-have, no user impact | `priority/low` |
 
+**Note (v2):** Any issue labeled `kind/security` MUST also receive at minimum `priority/high`. Critical reserved for active exploits or disclosed CVEs.
+
 ### 4. Set `needs_human: true` IF any of
 
 - The `kind` cannot be determined unambiguously from the body.
 - The issue claims a bug but provides no reproduction steps.
 - The requested area is outside the repo's catalog (suggest a new `area/*` in `reasoning`).
 - The body contains contradictions or appears to be multiple issues conflated.
+
+### 5. Pick `agile/*` (optional, exactly one)
+
+Determine the plan-tree position from the body's SHAPE, not just keywords:
+
+| Signal | Label |
+|---|---|
+| Cross-team, multi-quarter, spans multiple capabilities | `agile/epic` |
+| Single capability, multiple sub-deliverables, weeks-scale | `agile/feature` |
+| Single deliverable, single sprint, has acceptance criteria | `agile/story` |
+| Single concrete action, hours/days, no further breakdown | `agile/task` |
+
+Omit `agile/*` entirely if:
+- the issue is `kind/hook` (process hook, not plan work)
+- the issue is `kind/finding` (observation, not plan work)
+- the issue is `kind/rfc` or `kind/docs` and is not part of a planned deliverable
+
+`agile/task` is the LEAF of the plan tree — it never decomposes further. `agile/epic`, `agile/feature`, and `agile/story` are DECOMPOSABLE — a separate workflow will propose their children.
+
+When confidence on `agile/*` placement is low, omit the label and set `needs_human: true`.
 
 ## Body filling
 

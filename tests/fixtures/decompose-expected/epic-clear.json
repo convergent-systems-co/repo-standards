@@ -1,0 +1,39 @@
+{
+  "parent_level": "epic",
+  "child_level": "feature",
+  "confidence": 0.85,
+  "needs_human": false,
+  "reasoning": "Six explicit user-visible capabilities named in the body — one feature each.",
+  "children": [
+    {
+      "title": "OAuth2 login flow",
+      "body": "Users can sign in using a configured OAuth2 provider.\n\n**Acceptance:**\n- Provider list configurable per environment\n- Successful auth establishes a session\n- Failures surface a clear error",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Password-based login",
+      "body": "Users with local accounts can sign in by email + password.\n\n**Acceptance:**\n- Password compared with constant-time hash verification\n- Rate-limited per identity\n- Lockout after N failures",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "MFA enrollment and challenge",
+      "body": "Users can enroll TOTP, and the second factor is required on each session.\n\n**Acceptance:**\n- TOTP enroll flow\n- Challenge on login\n- Backup-code recovery",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Password reset",
+      "body": "Users can reset a forgotten password via a one-time email link.\n\n**Acceptance:**\n- Token expires in 30 min\n- One-time use\n- Audit-logged",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/medium"]
+    },
+    {
+      "title": "Session management",
+      "body": "Sessions are revocable, with explicit listing per user.\n\n**Acceptance:**\n- User can list active sessions\n- User can revoke any session\n- Admin can revoke another user's session",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/medium"]
+    },
+    {
+      "title": "Admin user impersonation",
+      "body": "Authorized admins can impersonate a user with full audit trail.\n\n**Acceptance:**\n- Impersonation only with explicit admin grant\n- All impersonated actions audit-logged\n- Banner visible to admin during impersonation",
+      "labels": ["agile/feature", "kind/feature", "area/core", "priority/medium"]
+    }
+  ]
+}

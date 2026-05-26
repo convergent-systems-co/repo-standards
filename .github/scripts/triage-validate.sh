@@ -61,6 +61,21 @@ if [ "$pri_count" -ne 1 ]; then
   exit 3
 fi
 
+# v2: agile/ + kind/{hook,finding} coherence rules
+agile_count=$(echo "$filtered" | jq '[.labels[] | select(startswith("agile/"))] | length')
+has_hook=$(echo "$filtered" | jq '.labels | index("kind/hook") != null')
+has_finding=$(echo "$filtered" | jq '.labels | index("kind/finding") != null')
+
+if [ "$agile_count" -gt 1 ]; then
+  echo "ERROR: at most one agile/ label permitted; got $agile_count" >&2
+  exit 4
+fi
+
+if [ "$agile_count" -eq 1 ] && { [ "$has_hook" = "true" ] || [ "$has_finding" = "true" ]; }; then
+  echo "ERROR: forbidden combo — kind/{hook,finding} MUST NOT carry agile/*" >&2
+  exit 4
+fi
+
 # 5. Confidence threshold → force needs_human
 conf=$(echo "$filtered" | jq -r .confidence)
 if awk -v c="$conf" -v t="$threshold" 'BEGIN{exit !(c < t)}'; then

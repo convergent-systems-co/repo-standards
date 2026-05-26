@@ -1,0 +1,12 @@
+{
+  "labels": ["kind/feature", "area/core", "priority/medium", "agile/story"],
+  "body_fill": {
+    "severity": null,
+    "repro": null,
+    "acceptance": ["The integration test in auth/oauth_test.go passes against a recorded Google response fixture."],
+    "out_of_scope": []
+  },
+  "confidence": 0.88,
+  "needs_human": false,
+  "reasoning": "Single deliverable (callback handler) with one clear done-criterion — story-level."
+}

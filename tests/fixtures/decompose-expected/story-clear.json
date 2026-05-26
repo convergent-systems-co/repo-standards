@@ -1,0 +1,34 @@
+{
+  "parent_level": "story",
+  "child_level": "task",
+  "confidence": 0.88,
+  "needs_human": false,
+  "reasoning": "Five concrete actions named in the body: token exchange, profile fetch, user upsert, session cookie, redirect — each a single task.",
+  "children": [
+    {
+      "title": "Implement code-for-token exchange in callback handler",
+      "body": "Call Google's token endpoint with the authorization code; parse the access token and id token.\n\n**Acceptance:**\n- Token exchange succeeds for a valid code\n- Errors surface ErrUpstream",
+      "labels": ["agile/task", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Fetch user profile from Google with access token",
+      "body": "Call Google's userinfo endpoint with the token; parse the email, name, picture.\n\n**Acceptance:**\n- Returns ProfileResponse on success\n- Returns ErrProfile on 401/403",
+      "labels": ["agile/task", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Upsert local user record from Google profile",
+      "body": "Insert a new user or update the existing user keyed on email.\n\n**Acceptance:**\n- New email creates new user\n- Existing email updates display name and picture",
+      "labels": ["agile/task", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Establish session cookie",
+      "body": "Issue a signed session cookie referencing the user record.\n\n**Acceptance:**\n- Cookie is HTTP-only, Secure, SameSite=Lax\n- 24-hour expiry; refresh-on-use",
+      "labels": ["agile/task", "kind/feature", "area/core", "priority/high"]
+    },
+    {
+      "title": "Redirect to post-login landing page",
+      "body": "On successful callback, 302 to /home (or the state-parameter-provided return URL).\n\n**Acceptance:**\n- Returning state URL is honored if same-origin\n- Else /home",
+      "labels": ["agile/task", "kind/feature", "area/core", "priority/medium"]
+    }
+  ]
+}

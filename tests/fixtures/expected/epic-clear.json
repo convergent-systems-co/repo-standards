@@ -1,0 +1,12 @@
+{
+  "labels": ["kind/feature", "area/core", "priority/medium", "agile/epic"],
+  "body_fill": {
+    "severity": null,
+    "repro": null,
+    "acceptance": ["Authentication system supporting OAuth2, password, MFA, password reset, session management, and admin impersonation is delivered."],
+    "out_of_scope": []
+  },
+  "confidence": 0.85,
+  "needs_human": false,
+  "reasoning": "Cross-team, multi-quarter, multiple capabilities — epic-level scope."
+}

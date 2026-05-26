@@ -11,7 +11,7 @@ aliases:
   "help wanted":      help-wanted
   invalid:            resolution/invalid
   wontfix:            resolution/wontfix
-  question:           null
+  question:           kind/rfc
   # Common drift seen in third-party templates
   feature:            kind/feature
   feature-request:    kind/feature
@@ -19,3 +19,11 @@ aliases:
   ci:                 area/ci
   infra:              area/infra
   docs:               kind/docs
+  # Dependabot / GitHub Actions auto-labels
+  dependencies:       kind/chore
+  github_actions:     area/ci
+  terraform:          area/infra
+  # Legacy agile labels (pre-agile/* namespace)
+  kind/epic:          agile/epic
+  kind/story:         agile/story
+  kind/task:          agile/task
